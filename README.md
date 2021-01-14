@@ -1,2 +1,2 @@
-# git-test
-# this is a git-test project
+# go-test
+# this is a go-test project
