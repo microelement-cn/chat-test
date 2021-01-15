@@ -1,0 +1,4 @@
+services/xelement/cmd/test/test.exe
+.vscode/launch.json
+.vscode/settings.json
+go.mod
