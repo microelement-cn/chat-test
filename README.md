@@ -1,2 +1,2 @@
-# go-test
-# this is a go-test project
+# chat-test
+# this is a chat server and a chat client.
