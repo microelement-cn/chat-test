@@ -5,20 +5,24 @@
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 #include "chat_worker.h"
+#include "chat_common.h"
 
 using boost::asio::ip::tcp;
-typedef std::unique_ptr<boost::asio::io_context> UIOContextPtr;
+
 class ChatServer
 {
 public:
-	explicit ChatServer(const tcp::endpoint& _endpoint, std::size_t _work_thread_num);
+	static ChatServer& Instance();
+	explicit ChatServer(const tcp::endpoint& _endpoint);
+	void Init(uint32_t _thread_num);
 	void Start();
 	void Stop();
-	void DoWrite(int _sid, QueueItem &_item);
+	void WriteUser(QueueItem _item);
+	void BroadCase(QueueItem _item);
+	void RemoveSocket(uint32_t _session_index);
 private:
 	void StartAcceptor();
 	void StartWorkers();
-	void UsableWorkerIdx(uint32_t &_socket_idx, uint32_t& _thread_idx);
 	ChatWorker& GetChatWorker(int _idx);
 	UIOContextPtr& GetIOContext(int _idx);
 private:

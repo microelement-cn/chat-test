@@ -11,50 +11,50 @@ using boost::asio::ip::tcp;
 class QueueItem
 {
 public:
-	QueueItem(int _socket_idx, std::shared_ptr<ChatMessage> _message)
-	: socket_idx(_socket_idx)
+	QueueItem(int _session_index, std::shared_ptr<ChatMessage> _message)
+	: session_index(_session_index)
 	, message(_message)
 	{}
 
 	QueueItem(int _socket_idx, std::shared_ptr<ChatMessage>&& _message)
-	: socket_idx(_socket_idx)
+	: session_index(_socket_idx)
 	, message(std::move(_message))
 	{}
 	
 	QueueItem(const QueueItem& _other)
-	: socket_idx(_other.socket_idx)
+	: session_index(_other.session_index)
 	, message(_other.message)
 	{}
 
 	QueueItem(QueueItem&& _other) noexcept
-	: socket_idx(_other.socket_idx)
+	: session_index(_other.session_index)
 	, message(std::move(_other.message)) 
 	{
-		_other.socket_idx = -1;
+		_other.session_index = -1;
 	}
 
 	QueueItem & operator=(const QueueItem& _other)
 	{
-		socket_idx = _other.socket_idx;
+		session_index = _other.session_index;
 		message = _other.message;
 		return *this;
 	}
 
 	QueueItem & operator=(QueueItem&& _other) noexcept
 	{
-		if (socket_idx == _other.socket_idx)
+		if (session_index == _other.session_index)
 			return *this;
 		
-		socket_idx = _other.socket_idx;
+		session_index = _other.session_index;
 		message = std::move(_other.message);
 
-		_other.socket_idx = -1;
+		_other.session_index = -1;
 		return *this;
 	}
 
 	~QueueItem() {}
 	
-	int socket_idx;
+	uint32_t session_index;
 	std::shared_ptr<ChatMessage> message;
 };
 

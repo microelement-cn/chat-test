@@ -3,145 +3,83 @@
 #include "chat_print.h"
 #include "chat_worker.h"
 #include "chat_message.h"
+#include "chat_session.h"
+#include "chat_session_pool.h"
 
 using namespace std;
-ChatWorker::ChatWorker(boost::asio::io_context& _io_contex)
-: m_IOContext(_io_contex)
+ChatWorker::ChatWorker(uint32_t _thread_index, boost::asio::io_context& _io_contex)
+: m_ThreadIndex(_thread_index)
+, m_IOContext(_io_contex)
 , m_IOWorker(_io_contex.get_executor())
 {
 }
 
-void ChatWorker::AddSocket(int _socket_idx, std::shared_ptr<tcp::socket> _socket)
+void ChatWorker::AddSocket(uint32_t _session_index, SPSocket _socket)
 {
-	string log = "INFO AddSocket _socket_idx=" + std::to_string(_socket_idx);
+	string log = "INFO AddSocket _session_index=" + std::to_string(_session_index);
 	ChatPrint::Print(log);
 	
-	auto iter = m_SocketPtrs.find(_socket_idx);
-	if (iter != m_SocketPtrs.end())
+	SPSESSION pSession = ChatSessionPool::Instance().GainSession(_session_index, _socket);
+	if (nullptr == pSession)
 		return;
 
-	m_SocketPtrs.insert(std::make_pair(_socket_idx, _socket));
-	StartRead(_socket_idx, *_socket);
+	m_SessionIdxs[_session_index] = _session_index;
+	pSession->StartRead();
 }
 
-void ChatWorker::StartRead(int _socket_idx, tcp::socket& _socket)
+void ChatWorker::StartWrite(QueueItem _item)
 {
-	DoReadHead(_socket_idx, _socket);
-}
-
-void ChatWorker::DoReadHead(int _socket_idx, tcp::socket& _socket)
-{
-	boost::asio::async_read(_socket, boost::asio::buffer(m_ReadBuf.Data(), ChatMessage::MAX_HEAD_SIZE),
-		[this, _socket_idx, &_socket] (const boost::system::error_code& _error, std::size_t _bytes_transferred) {
-			if (!_error && m_ReadBuf.DecodeHead())
-			{
-				DoReadBody(_socket_idx, _socket);
-			}
-			else if (_error == boost::asio::error::eof)
-			{
-				ChatPrint::Print("Socket disconnected.");
-				RemoveSocket(_socket_idx);
-			}
-			else
-			{
-				string log = "Error read head: " + _error.message();
-				ChatPrint::Print(log);
-				RemoveSocket(_socket_idx);
-			}
-		});
-
-}
-
-void ChatWorker::DoReadBody(int _socket_idx, tcp::socket& _socket)
-{
-    boost::asio::async_read(_socket, boost::asio::buffer(m_ReadBuf.Body(), m_ReadBuf.BodySize()),
-        [this, _socket_idx, &_socket](const boost::system::error_code& _error, std::size_t _bytes_transferred) {
-			if (!_error)
-			{
-				m_ReadBuf.Data()[m_ReadBuf.Size()] = 0;
-				std::string log = "DoReadBody " + std::string(m_ReadBuf.Data());
-				ChatPrint::Print(log);
-				std::shared_ptr<ChatMessage> rItem = std::make_shared<ChatMessage>(m_ReadBuf);
-				m_RefRQueue.emplace(_socket_idx, rItem);
-				m_RefWQueue.emplace(_socket_idx, rItem);
-				DoReadHead(_socket_idx, _socket);
-				ChatPrint::Print("DoReadHead again");
-				Broadcase();
-				ChatPrint::Print("Broadcase again");
-			}
-			else
-			{
-				string log =  "Error read body: " + _error.message();
-				ChatPrint::Print(log);
-				RemoveSocket(_socket_idx);
-			}
-        });
-
-}
-
-void ChatWorker::StartWrite()
-{
-	if (m_RefWQueue.empty())
+	uint32_t thread_index = ChatSessionPool::Instance().GainThreadIndex(_item.session_index);
+	if (thread_index != m_ThreadIndex)
 		return;
 	
-	auto item = m_RefWQueue.front();
-	m_RefWQueue.pop();
-	
-	auto iter = m_SocketPtrs.find(item.socket_idx);
-	if (iter == m_SocketPtrs.end())
+	SPSESSION spSession = ChatSessionPool::Instance().GetSession(_item.session_index);
+	if (nullptr == spSession)
 		return;
 	
-	boost::asio::async_write(*(iter->second), boost::asio::buffer(item.message->Data(), item.message->Size()),
-		[this](const boost::system::error_code& _error, std::size_t _bytes_transferred) {
-			if (!_error)
-				StartWrite();
+	spSession->DoCallBackDeliver(_item);
+}
+
+void ChatWorker::WriteItem(QueueItem _item)
+{
+	m_IOContext.post([this, _item]() {
+			StartWrite(_item);
 		});
 }
 
-void ChatWorker::WriteItem(QueueItem& _item)
+void ChatWorker::PostBroadCase(QueueItem _item)
 {
-	m_IOContext.post([this, &_item]() {
-			m_RefWQueue.push(_item);
-			StartWrite();
+	m_IOContext.post([this, _item]() {
+		m_RefWQueue.push(_item);
+		BroadCase();
 		});
 }
 
-void ChatWorker::Broadcase()
+void ChatWorker::BroadCase()
 {
+	std::string log = "========= Pop -------   Write queue size: " + std::to_string(m_RefWQueue.size());
+	ChatPrint::Print(log);
 	while (!m_RefWQueue.empty())
 	{
 		auto item = m_RefWQueue.front();
 		m_RefWQueue.pop();
 
-		for (auto iter=m_SocketPtrs.begin(); iter!=m_SocketPtrs.end(); ++iter)
+		for (auto iter= m_SessionIdxs.begin(); iter!= m_SessionIdxs.end(); ++iter)
 		{
-			boost::asio::async_write(*(iter->second), boost::asio::buffer(item.message->Data(), item.message->Size()),
-				[this, item](const boost::system::error_code& _error, std::size_t _bytes_transferred){
-					if (!_error)
-					{
-						stringstream ss;
-						ss << "Send success. =======" << item.message->Data() <<endl;
-						ChatPrint::Print(ss.str());
-					}
-				});
+			SPSESSION spSesssion = ChatSessionPool::Instance().GetSession(iter->first);
+			if (nullptr == spSesssion)
+				continue;
+
+			spSesssion->NoCallBackDeliver(item);
 		}
 	}	
+
+	log = "========= Pop +++++++   Write queue size: " + std::to_string(m_RefWQueue.size());
+	ChatPrint::Print(log);
 }
 
 void ChatWorker::RemoveSocket(int _socket_idx)
 {
-	auto iter = m_SocketPtrs.find(_socket_idx);
-	if (iter == m_SocketPtrs.end())
-		return;
-
-	if (nullptr == iter->second)
-	{
-		m_SocketPtrs.erase(iter);
-		return;
-	}
-	
-	iter->second->close();
-	m_SocketPtrs.erase(iter);
 }
 
 

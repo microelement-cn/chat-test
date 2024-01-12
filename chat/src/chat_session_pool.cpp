@@ -52,7 +52,7 @@ uint32_t ChatSessionPool::GainIdleSession()
 	uint32_t thread_index = const_max_uint32_val;
 	uint32_t session_index = const_max_uint32_val;
 	uint32_t poshold_index = const_max_uint32_val;
-	std::lock_guard<std::mutex> guard(m_Lock);
+	//std::lock_guard<std::mutex> guard(m_Lock);
 	for (size_t i = 0; i < m_FactorNum; i++)
 	{
 		uint32_t thread_index = const_max_uint32_val;
@@ -99,7 +99,7 @@ void ChatSessionPool::BackIdleSession(uint32_t _session_index)
 
 	uint32_t  unit_pos_off = const_max_uint32_val;
 	uint32_t  poshold_index = const_max_uint32_val;
-	std::lock_guard<std::mutex> guard(m_Lock);
+	//std::lock_guard<std::mutex> guard(m_Lock);
 	for (size_t i = 0; i < m_FactorNum; i++)
 	{
 		uint32_t max_index = (i + 1) * m_ThreadNum * const_max_bits_64;
@@ -126,4 +126,25 @@ uint32_t ChatSessionPool::GainThreadIndex(uint32_t _session_index)
 
 	uint32_t poshold_index = _session_index / const_max_bits_64;
 	return poshold_index % m_ThreadNum;
+}
+
+SPSESSION ChatSessionPool::GainSession(uint32_t _session_index, SPSocket _socket)
+{
+	if (_session_index >= m_Sessions.size())
+		return nullptr;
+
+	if (m_Sessions[_session_index] == nullptr)
+	{
+		m_Sessions[_session_index] = std::make_shared<ChatSession>(_session_index, _socket);
+	}
+
+	return m_Sessions[_session_index];
+}
+
+SPSESSION ChatSessionPool::GetSession(uint32_t _session_index)
+{
+	if (_session_index >= m_Sessions.size())
+		return nullptr;
+
+	return m_Sessions[_session_index];
 }

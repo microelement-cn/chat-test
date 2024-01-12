@@ -6,6 +6,9 @@
 using namespace std;
 void ChatClient::Write(const ChatMessage &_msg)
 {
+	if (!m_connect)
+		return;
+
 	boost::asio::post(m_IOContext, 
 		[this, _msg](){
 			bool writing = !m_WriteMsgs.empty();
@@ -30,10 +33,16 @@ void ChatClient::DoConnect(const tcp::resolver::results_type& _endpoints)
 		{
 			if (!_error)
 			{
+				m_connect = true;
 				stringstream ss;
 				ss << "Connect success:" << _ep << endl;
 				ChatPrint::Print(ss.str());
 				DoReadHead();
+			}
+			else
+			{
+				m_connect = false;
+				ChatPrint::Print("Connect failed");
 			}
 		});
 }
@@ -50,6 +59,7 @@ void ChatClient::DoReadHead()
 			else
 			{
 				m_Socket.close();
+				m_connect = false;
 			}
 		});
 }
@@ -67,6 +77,7 @@ void ChatClient::DoReadBody()
 			else
 			{
 				m_Socket.close();
+				m_connect = false;
 			}
 		});
 }
@@ -76,7 +87,7 @@ void ChatClient::DoWrite()
 	boost::asio::async_write(m_Socket, boost::asio::buffer(m_WriteMsgs.front().Data(), m_WriteMsgs.front().Size()), 
 		[this](boost::system::error_code _error, std::size_t /*lenght*/)
 		{
-			if (!_error)
+			if (!_error && m_connect)
 			{
 				m_WriteMsgs.pop_front();
 				if (!m_WriteMsgs.empty())
@@ -87,6 +98,7 @@ void ChatClient::DoWrite()
 			else
 			{
 				m_Socket.close();
+				m_connect = false;
 			}
 		});
 }

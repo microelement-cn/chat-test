@@ -5,11 +5,6 @@
 #include <stdlib.h>
 #include "chat_session.h"
 
-constexpr int const_max_byte_num = 8;
-constexpr int const_max_bits_64 = 64;
-constexpr int const_max_bits_8 = 8;
-constexpr uint32_t const_max_uint32_val = 0xffffffff;
-constexpr uint64_t const_max_uint64_val = 0xffffffffffffffff;
 typedef union POSMARK
 {
 	struct
@@ -37,8 +32,9 @@ typedef union POSMARK
 } POSMARK;
 
 
+typedef std::shared_ptr<ChatSession> SPSESSION;
 typedef std::vector<POSMARK> POSHOLDS;
-typedef std::vector<std::shared_ptr<ChatSession>> SESSIONS;
+typedef std::vector<SPSESSION> SESSIONS;
 class ChatSessionPool
 {
 public:
@@ -55,6 +51,8 @@ public:
 	uint32_t GainIdleSession();
 	void BackIdleSession(uint32_t _session_index);
 	uint32_t GainThreadIndex(uint32_t _session_index);
+	SPSESSION GainSession(uint32_t _session_index, SPSocket _socket);
+	SPSESSION GetSession(uint32_t _session_index);
 private:
 	std::mutex  m_Lock;
 	uint32_t	m_FactorNum;

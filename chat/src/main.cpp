@@ -10,11 +10,9 @@ int server_main(int argc, char** argv)
 	constexpr uint32_t thread_num = 1;
 
 	ChatSessionPool::Instance().Init(factor_num, thread_num);
-
-	tcp::endpoint endPoint(tcp::v4(), 1979);
-	ChatServer chatServer(endPoint, thread_num);
-	chatServer.Start();
-	chatServer.Stop();
+	ChatServer::Instance().Init(thread_num);
+	ChatServer::Instance().Start();
+	ChatServer::Instance().Stop();
 	return 0;
 }
 
@@ -36,6 +34,30 @@ int session_test(int argc, char** argv)
 	}
 	int a;
 	std::cin >> a;
+	return 0;
+}
+
+int signal_io_context_test(int argc, char** argv)
+{
+	boost::asio::io_context io_context;
+	boost::asio::io_context::strand strand(io_context);
+
+	auto handle1 = []() { std::cout << "handle 1: " << std::this_thread::get_id() << std::endl; };
+	auto handle2 = []() { std::cout << "handle 2: " << std::this_thread::get_id() << std::endl; };
+
+	std::cout << "Main thread: " << std::this_thread::get_id() << std::endl;
+
+	for (size_t i=0; i<10; ++i)
+	{
+		strand.post(handle1);
+		strand.post(handle2);
+	}
+
+	std::thread thread1([&io_context]() { io_context.run(); });
+	std::thread thread2([&io_context]() { io_context.run(); });
+
+	thread1.join();
+	thread2.join();
 	return 0;
 }
 

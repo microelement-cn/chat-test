@@ -14,6 +14,7 @@ public:
 	ChatClient(boost::asio::io_context &io_context, const tcp::resolver::results_type& endpoints) 
 		: m_IOContext(io_context)
 		, m_Socket(io_context) 
+		, m_connect(false)
 		{
 			DoConnect(endpoints);
 		}
@@ -34,4 +35,5 @@ private:
 	tcp::socket m_Socket;
 	ChatMessage m_ReadMsg;
 	ChatMessageQueue m_WriteMsgs;
+	bool m_connect;
 };
